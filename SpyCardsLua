@@ -1,0 +1,717 @@
+function onLoad()
+
+  StartButtons = {getObjectFromGUID('5a7db4'), getObjectFromGUID('9a9eb1')}
+  TPCounter = getObjectFromGUID('f6d10b')
+  roundCount = 0
+
+  pZoneGrnOne = {
+    getObjectFromGUID('e4b5b8'),
+    getObjectFromGUID('9278f8'),
+    getObjectFromGUID('2cf32a'),
+    getObjectFromGUID('ce005f'),
+    getObjectFromGUID('4af78f')}
+
+  pZoneYelOne = {
+    getObjectFromGUID('db75c3'),
+    getObjectFromGUID('215156'),
+    getObjectFromGUID('db8629'),
+    getObjectFromGUID('4c82f5'),
+    getObjectFromGUID('678203')}
+
+  pZoneGrnTwo = {
+    getObjectFromGUID('cff490'),
+    getObjectFromGUID('ccfa90'),
+    getObjectFromGUID('b37368'),
+    getObjectFromGUID('80b4ca'),
+    getObjectFromGUID('2d1334')}
+
+  pZoneYelTwo = {
+    getObjectFromGUID('b67671'),
+    getObjectFromGUID('522c99'),
+    getObjectFromGUID('67159a'),
+    getObjectFromGUID('561048'),
+    getObjectFromGUID('a15d3e')}
+
+  pATK = {0,0}
+  pDEF = {0,0}
+  pPRC = {0,0}
+  pSCR = {0,0}
+  pHEL = {0,0}
+  pSET = {{0,0}, {0,0}}
+  -- Attack, Defense, Pierce, Score, Heal, Setup
+
+  pCounterATK = {getObjectFromGUID('c86e6a'), getObjectFromGUID('7c0279')}
+  pCounterDEF = {getObjectFromGUID('8535e5'), getObjectFromGUID('f074ad')}
+  pCounterHEL = {getObjectFromGUID('425d98'), getObjectFromGUID('f99610')}
+  -- Attack, Defense, Health
+
+  pZoneGrn = {getObjectFromGUID('e7e8c1'), getObjectFromGUID('398d18')}
+  pZoneYel = {getObjectFromGUID('6b1f87'), getObjectFromGUID('6eaa41')}
+  pZoneBos = {getObjectFromGUID('aa5d86'), getObjectFromGUID('e93eb0')}
+  pZoneDek = {getObjectFromGUID('6ac438'), getObjectFromGUID('e65061')}
+  pZoneShf = {getObjectFromGUID('167584'), getObjectFromGUID('b1c5b1')}
+  -- Green, Yellow, Boss, Deck, Shuffle
+
+  pZoneGrnSub = {pZoneGrnOne, pZoneGrnTwo}
+  pZoneYelSub = {pZoneYelOne, pZoneYelTwo}
+
+  pCounterHEL[1].setValue(5)
+  pCounterHEL[2].setValue(5)
+  TPCounter.setValue(2)
+  pButton = {false, false}
+  roundStarted = false
+  colors = {"Red", "White"}
+
+  startLuaCoroutine(self, "PlayMusic")
+
+  end
+
+function PlayMusic()
+  while MusicPlayer.loaded == false do
+      coroutine.yield(0)
+  end
+   MusicPlayer.play()
+  return 1
+end
+
+function setButton(params)
+  if not(roundStarted) then
+    pButton[params.player] = not(pButton[params.player])
+    if pButton[params.player] then
+      params.obj.setColorTint({0/255, 255/255, 10/255})
+    else
+      params.obj.setColorTint({219/255, 26/255, 24/255})
+    end
+    if pButton[1] and pButton[2] then
+      startRound()
+    end
+  end
+end
+
+  function startRound()
+
+    if checkTp()  and not(roundStarted) then
+        roundStarted = true
+        roundCount = roundCount + 1
+        broadcastToAll("Round " .. roundCount .. " has started!", {1,1,1})
+        setAllVisible(1)
+        setAllVisible(2)
+        applySpecificEffect("summonSpecial", 1, pZoneYel[1])
+        applySpecificEffect("summonSpecial", 2, pZoneYel[2])
+        applySpecificEffect("summon", 1, pZoneBos[1])
+        applySpecificEffect("summon", 2, pZoneBos[2])
+
+        Wait.time(function() applySpecificEffect("summon", 1, pZoneYel[1])
+                             applySpecificEffect("summon", 2, pZoneYel[2]) end, 0.5)
+
+        Wait.time(function() loadZone(1, pZoneBos[1])
+                             loadZone(2, pZoneBos[2])
+                             loadZone(1, pZoneYel[1])
+                             loadZone(2, pZoneYel[2]) end, 2)
+
+      Wait.time(function()
+        for a = 1, 2 do
+          loadGreen(a)
+          pATK[a] = pATK[a] + pSET[a][1]
+          pCounterATK[a].setValue(pATK[a])
+          pCounterDEF[a].setValue(pDEF[a])
+        end
+      end, 2.5)
+
+        Wait.time(function() checkWinner()
+                             for b = 1, 2 do
+                               resetDecks(b)
+                               pCounterATK[b].setValue(0)
+                               pCounterDEF[b].setValue(0)
+                               pATK[b] = 0
+                               pDEF[b] = 0
+                               pPRC[b] = 0
+                               pSCR[b] = 0
+                               pHEL[b] = 0
+                               pSET[b][1] = pSET[b][2]
+                               pSET[b][2] = 0
+                               StartButtons[b].setColorTint({219/255, 26/255, 24/255})
+                               pButton[b] = false
+                             end
+                             roundStarted = false
+                           end, 4)
+    end
+  end
+
+  function dealToPlayer(player)
+
+    local handCount = #Player[colors[player]].getHandObjects()
+
+    if (handCount < 5) then
+
+      for a = 1, (handCount == 0 and 3 or 2) do
+
+        if #pZoneShf[player].getObjects() == 0 then break end
+
+        if handCount >= 5 then break end
+
+        pZoneShf[player].getObjects()[1].deal(1, colors[player], 1)
+
+        handCount = handCount + 1
+
+      end
+    end
+  end
+
+  function checkWinner()
+
+    pSCR[1] = roundNum(pATK[1] - roundNum(pDEF[2] - pPRC[1]))
+    pSCR[2] = roundNum(pATK[2] - roundNum(pDEF[1] - pPRC[2]))
+    local msg = nil
+
+    if pSCR[1] > pSCR[2] then
+
+      pCounterHEL[2].Counter.decrement()
+      pCounterHEL[1].Counter.setValue(roundHealth(pCounterHEL[1].Counter.getValue() + pHEL[1]))
+      broadcastToAll("Player 1 wins the round", {r=1, g=1, b=1})
+
+    elseif pSCR[2] > pSCR[1] then
+
+      pCounterHEL[1].Counter.decrement()
+      pCounterHEL[2].Counter.setValue(roundHealth(pCounterHEL[2].Counter.getValue() + pHEL[2]))
+      broadcastToAll("Player 2 wins the round", {r=1, g=1, b=1})
+
+    elseif pSCR[1] == pSCR[2] then
+
+      broadcastToAll("Stalemate...", {r=1, g=1, b=1})
+
+    end
+
+    if TPCounter.getValue() < 10 then TPCounter.Counter.increment() end
+
+    if pCounterHEL[1].getValue() == 0 then
+      msg = ("Player " .. 2 .. " wins!")
+    elseif pCounterHEL[2].getValue() == 0 then
+      msg = ("Player " .. 1 .. " wins!")
+    end
+
+    if msg != nil then
+      broadcastToAll(msg, {r=0, g=1, b=0})
+      Wait.time(function() resetGame() end, 1)
+    end
+  end
+
+  function setAllVisible(player)
+
+    local zones = {pZoneGrn[player], pZoneYel[player], pZoneBos[player]}
+
+    for a = 1, #zones do
+      if #zones[a].getObjects() > 0 then
+        for b = 1, #zones[a].getObjects() do
+
+          zones[a].getObjects()[b].setInvisibleTo()
+
+        end
+      end
+    end
+  end
+
+  function resetGame()
+
+    pATK = {0,0}
+    pDEF = {0,0}
+    pPRC = {0,0}
+    pSCR = {0,0}
+    pHEL = {0,0}
+    pSET = {{0,0}, {0,0}}
+    roundCount = 0
+
+    pCounterHEL[1].setValue(5)
+    pCounterHEL[2].setValue(5)
+    TPCounter.setValue(2)
+
+    broadcastToAll("Values reset, remember to pickup all your cards!", {r=0, g=0, b=1})
+
+  end
+
+  function roundHealth(num)
+
+    return (num > 5 and 5 or num)
+
+  end
+
+  function roundNum (num)
+
+    return (num < 0 and 0 or num)
+
+  end
+
+  function resetDecks (player)
+
+    local zones = {pZoneGrn[player], pZoneYel[player], pZoneBos[player]}
+
+    if #pZoneShf[player].getObjects() > 0 then dealToPlayer(player) end
+
+    Wait.time(function()
+
+      if #pZoneDek[player].getObjects() > 0 then
+
+        pZoneDek[player].getObjects()[1].setPosition(pZoneShf[player].getPosition())
+
+      end
+
+      for a = 1, #zones do
+
+        if #zones[a].getObjects() > 0 then
+
+          for b = 1, #zones[a].getObjects() do
+
+            if zones[a].getObjects()[b].getVar('summoned') then
+
+              zones[a].getObjects()[b].destruct()
+
+            end
+
+            if zones[a].getObjects()[b].getVar('used') then
+
+              zones[a].getObjects()[b].setVar('used', false)
+
+            end
+
+            if not(zones[a].getObjects()[b].getVar('numbed')) then
+
+              zones[a].getObjects()[b].flip()
+
+            end
+
+            zones[a].getObjects()[b].setVar('numbed', false)
+            zones[a].getObjects()[b].setPosition(pZoneDek[player].getPosition())
+
+          end
+        end
+      end
+    end, 0.5)
+
+    if #pZoneShf[player].getObjects() > 0 then
+
+      Wait.time(function() pZoneShf[player].getObjects()[1].shuffle() end, 2)
+
+    end
+  end
+
+  function loadGreen(player)
+
+    for a = 1, #pZoneGrn[player].getObjects() do
+
+      if not(pZoneGrn[player].getObjects()[a].getVar('numbed')) then
+
+        pATK[player] = pATK[player] + pZoneGrn[player].getObjects()[a].getVar('attack')
+
+      end
+    end
+  end
+
+  function applySpecificEffect(tempEffect, player, zone)
+
+    local count = 0
+    zone = zone.getObjects()
+
+    for a = 1, #zone do
+      local card = zone[a]
+
+      for b = 1, #card.getVar('effects') do
+        local effect = card.getVar('effects')[b]
+
+        if (effect == tempEffect) or
+           (effect == tempEffect.."IfCoin") or
+           (effect == tempEffect.."IfTribe") then
+
+          count = count + 1
+          Wait.time(function()
+            applyEffect(player, card, effect)
+
+            --The following If and elseif statements are a quick bandaid
+            --solution to the problem that the summon affect only allows 1 card
+            --to be set as the card to summon. This may be fixed after the beta.
+
+            if (card.getVar('name') == "The Watcher") then
+
+            card.setVar('summonName', (card.getVar('summonName') == "Krawler" and "Warden" or "Krawler"))
+
+            elseif (card.getVar('name') == "Spider") then
+
+            card.setVar('summonName', (card.getVar('summonName') == "Inichas" and "Jellyshroom" or "Inichas"))
+
+            end
+          end, (count / 5))
+        end
+      end
+    end
+  end
+
+  function loadZone(player, zone)
+
+    for a = 1, #zone.getObjects() do
+
+      local card = zone.getObjects()[a]
+
+      if card.getVar('used') ~= true then
+
+        for b = 1, #card.getVar('effects') do
+
+          local effect = card.getVar('effects')[b]
+
+          if effect ~= "summon" and
+          effect ~= "summonSpecial" and
+          effect ~= "summonIfCoin" and
+          effect ~= "summonIfTribe" then
+
+            applyEffect(player, card, effect)
+
+          end
+        end
+      end
+    end
+  end
+
+  function coinFlip()
+
+    return (math.random(1,2) - 1)
+
+  end
+
+  function applyEffect(player, card, effect)
+
+    if effect == "defIfCoin" then
+
+      for b = 1, card.getVar('coinAmount') do
+
+        pDEF[player] = pDEF[player] + (card.getVar('coinDefense') * coinFlip())
+
+      end
+
+    elseif effect == "defIfName" then
+
+      if 0 < (searchFor({card.getVar('ifName')}, 'name', player)) then
+
+        pDEF[player] = pDEF[player] + card.getVar('nameDef')
+
+      end
+
+    elseif effect == "atkIfCoin" then
+
+      for b = 1, card.getVar('coinAmount') do
+
+        pATK[player] = pATK[player] + (card.getVar('coinAttack') * coinFlip())
+
+      end
+
+    elseif effect == "atkIfName" then
+
+      if 0 < (searchFor({card.getVar('ifName')}, 'name', player)) then
+
+        pATK[player] = pATK[player] + card.getVar('nameAtk')
+
+      end
+
+    elseif effect == "atkPerName" then
+
+      pATK[player] = pATK[player] + (card.getVar('nameAtk') * searchFor({card.getVar('perName')}, 'name', player))
+
+    elseif effect == "defOrAtkIfCoin" then
+
+      if coinFlip() == 1 then
+        pDEF[player] = pDEF[player] + card.getVar('coinDefense')
+      else
+        pATK[player] = pATK[player] + card.getVar('coinAttack')
+      end
+
+    elseif effect == "healIfTribe" then
+
+      if card.getVar('tribeAmount') <= (searchFor({card.getVar('tribe')}, 'tribe', player) - 1) then
+
+        pCounterHEL[player].setValue(pCounterHEL[player].getValue() + card.getVar('heal'))
+
+      end
+
+    elseif effect == "healIfName" then
+
+      if 0 < (searchFor({card.getVar('ifName')}, 'name', player)) then
+
+        pCounterHEL[player].setValue(pCounterHEL[player].getValue() + card.getVar('heal'))
+
+      end
+
+    elseif effect == "healIfAttack" then
+
+      if pATK[player] <= card.getVar('attackHeal') then
+
+        pCounterHEL[player].setValue(pCounterHEL[player].getValue() + card.getVar('heal'))
+
+      end
+
+    elseif effect == "numbIfTribe" then
+
+      if card.getVar('tribeAmount') <= (searchFor({card.getVar('tribe')}, 'tribe', player) - 1) then
+
+        applyEffect(player, card, "numb")
+
+      end
+
+    elseif effect == "numbIfName" then
+
+      if 0 < (searchFor({card.getVar('ifName')}, 'name', player)) then
+
+        applyEffect(player, card, "numb")
+
+      end
+
+    elseif effect == "empower" then
+
+        pATK[player] = pATK[player] + (card.getVar('empowerAtk') * searchFor(card.getVar('searchTribe'), 'tribe', player))
+
+    elseif effect == "addDef" then
+
+      pDEF[player] = pDEF[player] + card.getVar('defense')
+
+    elseif effect == "addAtk" then
+
+      pATK[player] = pATK[player] + card.getVar('attack')
+
+    elseif effect == "addPrc" then
+
+      pPRC[player] = pPRC[player] + card.getVar('pierce')
+
+    elseif effect == "numb" then
+
+      for a = 1, 5 do
+
+        if #pZoneGrnSub[player * -1 + 3][a].getObjects() > 0 then
+
+          if not(pZoneGrnSub[player * -1 + 3][a].getObjects()[1].getVar('numbed')) then
+
+            pZoneGrnSub[player * -1 + 3][a].getObjects()[1].setVar('numbed', true)
+            pZoneGrnSub[player * -1 + 3][a].getObjects()[1].flip()
+
+            break
+          end
+        end
+      end
+
+  elseif effect == "numbIfCoin" then
+
+      for b = 1, card.getVar('coinAmount') do
+
+        if math.random(1,2) == 1 then
+
+          applyEffect(player, card, "numb")
+
+        end
+      end
+
+    elseif effect == "lifesteal" then
+
+      pHEL[player] = pHEL[player] + card.getVar('heal')
+
+    elseif effect == "summon" then
+
+      local summonedCard = getCloneObject(card)
+      local tempZone = nil
+
+      if summonedCard.getVar('effects') == nil then
+        tempZone = pZoneGrnSub[player]
+      else
+        tempZone = pZoneYelSub[player]
+      end
+
+      for a = 1, #tempZone do
+        if #tempZone[a].getObjects() == 0 then
+            local goTo = {tempZone[a].getPosition()[1], 0, tempZone[a].getPosition()[3]}
+
+            summonedCard = summonedCard.clone()
+            summonedCard.setLock(false)
+            summonedCard.setPosition(goTo)
+            summonedCard.setVar('summoned', true)
+            break
+        end
+      end
+
+    elseif effect == "summonSpecial" then
+
+      local summonedCard = getCloneObject(card).clone()
+      local goTo = {card.getPosition()[1], card.getPosition()[2]+0.1, card.getPosition()[3]}
+
+      summonedCard.setPosition(goTo)
+      summonedCard.setVar('summoned', true)
+
+    elseif effect == "summonIfCoin" then
+
+      for b = 1, card.getVar('coinAmount') do
+
+        if math.random(1,2) == 1 then
+
+          applyEffect(player, card, "summon")
+
+        end
+      end
+
+    elseif effect == "vsPlants" then
+
+      if (0 < searchFor({"chomper", "plant", "seedling"}, 'tribe', player * -1 + 3)) then
+
+        pATK[player] = pATK[player] + card.getVar('vsAttack')
+
+      end
+
+    elseif effect == "vsBugs" then
+
+      if (0 < searchFor({"thug", "bug", "wasp", "mothfly", 'leafbug', "midge"}, 'tribe', player * -1 + 3)) then
+
+        pATK[player] = pATK[player] + card.getVar('vsAttack')
+
+      end
+
+    elseif effect == "setup" then
+
+      pSET[player][2] = card.getVar('setupAtk')
+
+    elseif effect == "unity" then
+
+      pATK[player] = pATK[player] + (card.getVar('unityAttack') * searchFor({card.getVar('tribe')}, 'tribe', player))
+      card.setVar('used', true)
+
+      for a = 1, #pZoneYel[player].getObjects() do
+
+        local otherCard = pZoneYel[player].getObjects()[a]
+
+        if ((card.getVar('name') == otherCard.getVar('name')) and not(otherCard.getVar('used'))) then
+
+          otherCard.setVar('used', true)
+
+        end
+      end
+    end
+  end
+
+  function getCloneObject(cloneCard)
+
+    local object = nil
+
+    if cloneCard.getVar('summonName') == "Chomper" then
+
+      object = getObjectFromGUID('4f159b')
+
+    elseif cloneCard.getVar('summonName') == "Abomihoney" then
+
+      object = getObjectFromGUID('be5962')
+
+    elseif cloneCard.getVar('summonName') == "Jellyshroom" then
+
+      object = getObjectFromGUID('8a4573')
+
+    elseif cloneCard.getVar('summonName') == "Inichas" then
+
+      object = getObjectFromGUID('0d6355')
+
+    elseif cloneCard.getVar('summonName') == "Warden" then
+
+      object = getObjectFromGUID('81d00b')
+
+    elseif cloneCard.getVar('summonName') == "Krawler" then
+
+      object = getObjectFromGUID('81f5c9')
+
+    elseif cloneCard.getVar('summonName') == "Venus' Bud" then
+
+      object = getObjectFromGUID('3a23fb')
+
+    elseif cloneCard.getVar('summonName') == "Miniboss" then
+
+      object = getObjectFromGUID('7acfc2').getObjects()
+      object = object[math.random(1,#object)]
+
+    elseif cloneCard.getVar('summonName') == "Wasp" then
+
+      object = getObjectFromGUID('c55a49').getObjects()
+      object = object[math.random(1,#object)]
+
+    end
+
+    return object
+
+  end
+
+  function searchFor(tribe, term, player)
+
+    local num = 0
+    local zones = {pZoneGrn[player], pZoneYel[player], pZoneBos[player]}
+
+    for a = 1, #tribe do
+
+      for b = 1, #zones do
+
+        if #zones[b].getObjects() > 0 then
+
+          for c = 1, #zones[b].getObjects() do
+
+            if tribe[a] == zones[b].getObjects()[c].getVar(term) then
+
+              num = num + 1
+
+            end
+          end
+        end
+      end
+    end
+
+    return num
+
+  end
+
+  function checkTp()
+
+    pTP = {0,0}
+    local output = true
+
+    for a = 1, 2 do
+
+      local zones = {pZoneGrn[a], pZoneYel[a], pZoneBos[a]}
+
+      for b = 1, #zones do
+
+        for c = 1, #zones[b].getObjects() do
+
+          pTP[a] = pTP[a] + zones[b].getObjects()[c].getVar('tp')
+
+        end
+      end
+    end
+
+    for d = 1, 2 do
+
+      if pTP[d] > TPCounter.getValue() then
+        local msg = ("Player "..d.. " is over the TP limit!")
+        broadcastToAll(msg, {r=1,g=0,b=0})
+        output = false
+        StartButtons[d].setColorTint({219/255, 26/255, 24/255})
+        pButton[d] = false
+
+      end
+    end
+
+    return output
+
+  end
+
+  function onObjectEnterScriptingZone(zone, obj)
+
+  local tempID = zone.getGUID()
+
+      if tempID == "e7e8c1" or tempID == "6b1f87" or
+         tempID == "aa5d86" or tempID == "6ac438" or
+         tempID == "167584" then
+        obj.setInvisibleTo({"White"})
+      elseif tempID == "398d18" or tempID == "6eaa41" or
+             tempID == "e93eb0" or tempID == "e65061" or
+             tempID == "b1c5b1" then
+        obj.setInvisibleTo({"Red"})
+      elseif tempID == "0f699c" or tempID == "6e6df6" then
+        obj.setInvisibleTo()
+      end
+
+  end
